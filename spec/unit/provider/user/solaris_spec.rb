@@ -99,7 +99,27 @@ describe Chef::Provider::User::Solaris do
   end
 
   describe "when managing user locked status" do
+    let(:user_lock) { "adam:FOO:::::::" }
+    let(:shadow_file_contents) do
+      %W{
+        user1:LK:::::::\n
+        #{user_lock}\n
+        user2:NP:::::::\n
+      }
+    end
+
     describe "when determining if the user is locked" do
+      before do
+        allow(::File).to receive(:readlines).and_return(shadow_file_contents)
+      end
+
+      context "when user does not exist" do
+        let(:user_lock) { "other_user:FOO:::::::" }
+
+        it "should return nil" do
+          expect(provider.check_lock).to eql(nil)
+        end
+      end
 
       # locked shadow lines
       [
@@ -109,14 +129,16 @@ describe Chef::Provider::User::Solaris do
         "adam:*LK*bahamas10:::::::",
         "adam:*LK*L....:::::::",
       ].each do |shadow|
-        it "should return true if user is locked with #{shadow}" do
-          shell_return = shellcmdresult.new(shadow + "\n", "", 0)
-          expect(provider).to receive(:shell_out!).with("getent", "shadow", "adam").and_return(shell_return)
-          expect(provider.check_lock).to eql(true)
+        context "for user 'adam' with entry '#{shadow}'" do
+          let(:user_lock) { shadow }
+
+          it "should return true" do
+            expect(provider.check_lock).to eql(true)
+          end
         end
       end
 
-      # unlocked shadow lines
+      # unlcoked shadow lines
       [
         "adam:NP:::::::",
         "adam:*NP*:::::::",
@@ -124,10 +146,12 @@ describe Chef::Provider::User::Solaris do
         "adam:bahamas10:::::::",
         "adam:L...:::::::",
       ].each do |shadow|
-        it "should return false if user is unlocked with #{shadow}" do
-          shell_return = shellcmdresult.new(shadow + "\n", "", 0)
-          expect(provider).to receive(:shell_out!).with("getent", "shadow", "adam").and_return(shell_return)
-          expect(provider.check_lock).to eql(false)
+        context "for user 'adam' with entry '#{shadow}'" do
+          let(:user_lock) { shadow }
+
+          it "should return false" do
+            expect(provider.check_lock).to eql(false)
+          end
         end
       end
     end

@@ -46,19 +46,17 @@ class Chef
         end
 
         def check_lock
-          shadow_line = shell_out!("getent", "shadow", new_resource.username).stdout.strip rescue nil
+          @locked = nil
+          ::File.readlines(@password_file).each do |entry|
+            user = entry.strip.split(":")
+            if user[0] == @new_resource.username
+              # '*LK*...' and 'LK' are both considered locked
+              @locked = !!user[1].match(/^\*?LK\*?/)
+            end
+          end
 
-          # if the command fails we return nil, this can happen if the user
-          # in question doesn't exist
-          return nil if shadow_line.nil?
-
-          # convert "dave:NP:16507::::::\n" to "NP"
-          fields = shadow_line.split(":")
-
-          # '*LK*...' and 'LK' are both considered locked,
-          # so look for LK at the beginning of the shadow entry
-          # optionally surrounded by '*'
-          @locked = !!fields[1].match(/^\*?LK\*?/)
+          # If we're in whyrun mode, and the user is not created, we assume it will be
+          return false if whyrun_mode? && @locked.nil?
 
           @locked
         end
